@@ -1,0 +1,155 @@
+:root {
+  font-family: system-ui, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  justify-content: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#app {
+  max-width: 900px;
+  padding: 2rem;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.word-done {
+  color: #9ca3af; 
+}
+
+.word-current {
+  text-decoration: underline;
+  font-weight: 600;
+}
+
+.word-pending {
+  color: #111827; 
+}
+
+.char-correct {
+  color: #14ba38;
+}
+
+.char-wrong {
+  color: rgb(235, 108, 24); 
+}
+
+.char {
+  white-space: pre;
+}
+.player-grid {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 32px !important;
+  margin-top: 40px !important;
+  align-items: start !important;
+  justify-items: center !important;
+  width: 100% !important;
+}
+
+.player-cell {
+  text-align: center;
+  width: 100%;
+}
+.player-input {
+  width: 80%;
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+
+#player-input {
+  width: 100%;
+  max-width: 600px;
+  margin-top: 20px;
+  font-size: 18px;
+  padding: 8px;
+}
+
+
+#stats-display {
+  margin-top: 10px;
+  color: #4e7450;
+  font-size: 15px;
+}
+
+#game-status {
+  margin-top: 10px;
+  font-size: 16px;
+}
+
+#hearts-display {
+  display: block;
+  font-size: 15px;   
+  margin-bottom: 6px;
+}
+
+#game-over-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+#game-over-content {
+  background: #416e98;
+  border-radius: 12px;
+  padding: 24px 32px;
+  max-width: 320px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}
+
+#game-over-content h3 {
+  margin-top: 0;
+  margin-bottom: 8px;
+}
+
+#game-over-stats {
+  font-size: 14px;
+  margin-bottom: 16px;
+  color: #d1d5db;
+}
+
+#restart-button {
+  padding: 8px 16px;
+  font-size: 14px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+}
+
+#restart-button:hover {
+  opacity: 0.9;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #151e26;
+    background-color: #ffffff;
+  }
+
+  #player-input {
+    background-color: #f7f7f7;
+    color: #111;
+  }
+}
