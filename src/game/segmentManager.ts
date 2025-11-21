@@ -2,7 +2,7 @@ import { segmentStream, type Segment } from "../segmentEngine";
 
 export type PlayerId = "p1" | "p2";
 
-//start: two independent segment streams, one per player
+//two independent segment streams, one per player
 const streamP1 = segmentStream();
 const streamP2 = segmentStream();
 
@@ -25,4 +25,3 @@ export function advanceToNextSegment(playerId: PlayerId): Segment {
 
   return nextSegment;
 }
-//end
