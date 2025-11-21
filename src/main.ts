@@ -13,14 +13,8 @@ import {
 } from "./ui/renderSegment";
 import { renderHearts } from "./ui/renderHearts";
 import { renderStats } from "./ui/renderStats";
-import {
-  showGameOverOverlay,
-  attachRestartHandler,
-} from "./ui/renderGameOver";
-import {
-  MAX_PLAYER_HEARTS,
-  type GameState,
-} from "./game/gameState";
+import { showGameOverOverlay, attachRestartHandler } from "./ui/renderGameOver";
+import { MAX_PLAYER_HEARTS, type GameState } from "./game/gameState";
 
 //start: per-player segment text
 let currentSegmentP1 = getCurrentSegment("p1");
@@ -57,14 +51,26 @@ appElement.innerHTML = `
     style="
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 24px;
+      gap: 300px;
       align-items: flex-start;
       justify-items: center;
-      max-width: 900px;
+      max-width: 1100px;  
       margin: 0 auto;
+      padding: 20px 0;  
     "
   >
-    <div style="text-align: center; width: 100%;">
+    <div
+      style="
+        width: 100%;
+        background: #ffffff;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        border: 1px solid #e5e5e5;
+        text-align: center;
+        min-height: 300px;
+      "
+    >
       <span id="hearts-display-p1"></span>
       <div id="stats-display-p1" style="font-size: 14px; margin-top: 4px;"></div>
 
@@ -80,7 +86,18 @@ appElement.innerHTML = `
       />
     </div>
 
-    <div style="text-align: center; width: 100%;">
+    <div
+      style="
+        width: 100%;
+        background: #ffffff;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        border: 1px solid #e5e5e5;
+        text-align: center;
+        min-height: 300px;
+      "
+    >
       <span id="hearts-display-p2"></span>
       <div id="stats-display-p2" style="font-size: 14px; margin-top: 4px;"></div>
 
@@ -119,10 +136,12 @@ const statsDisplayP1 =
 const statsDisplayP2 =
   document.querySelector<HTMLDivElement>("#stats-display-p2")!;
 
-const segmentTargetElementP1 =
-  document.querySelector<HTMLElement>("#segment-target-text-p1")!;
-const segmentTargetElementP2 =
-  document.querySelector<HTMLElement>("#segment-target-text-p2")!;
+const segmentTargetElementP1 = document.querySelector<HTMLElement>(
+  "#segment-target-text-p1"
+)!;
+const segmentTargetElementP2 = document.querySelector<HTMLElement>(
+  "#segment-target-text-p2"
+)!;
 
 const inputFieldP1 =
   document.querySelector<HTMLInputElement>("#player-input-p1")!;
@@ -259,7 +278,6 @@ function handlePlayerDefeat(loserLabel: string, loserState: GameState): void {
     timerState.elapsedSeconds
   );
 }
-
 
 // Load next segment for a specific player
 function loadNextSegmentFor(player: PlayerId): void {

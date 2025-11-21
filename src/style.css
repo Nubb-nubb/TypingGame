@@ -82,7 +82,8 @@ body {
 }
 
 
-#stats-display {
+#stats-display-p1,
+#stats-display-p2 {
   margin-top: 10px;
   color: #4e7450;
   font-size: 15px;
