@@ -13,7 +13,7 @@ import {
   renderSegmentWords,
   //start
   getEffectiveSegmentText,
-  getWordIndexForChar,
+  isGoldenWordAtCharEnd,
   //end
 } from "./ui/renderSegment";
 
@@ -22,7 +22,7 @@ import { renderStats } from "./ui/renderStats";
 import { showGameOverOverlay, attachRestartHandler } from "./ui/renderGameOver";
 import { MAX_PLAYER_HEARTS, type GameState } from "./game/gameState";
 
-//PlayerContext to encapsulate per-player runtime state
+// PlayerContext: encapsulates per-player runtime state
 type PlayerContext = {
   id: PlayerId;
   state: GameState;
@@ -34,14 +34,14 @@ type PlayerContext = {
   setSegmentText: (text: string) => void;
 };
 
-// per-player segment text
+// Per-player segment text
 let currentSegmentP1 = getCurrentSegment("p1");
 let currentSegmentP2 = getCurrentSegment("p2");
 
 let segmentTextP1 = currentSegmentP1.text;
 let segmentTextP2 = currentSegmentP2.text;
 
-// per-player game state
+// Per-player game state
 const player1State: GameState = {
   playerHearts: MAX_PLAYER_HEARTS,
   segmentsCompleted: 0,
@@ -174,7 +174,7 @@ const restartButton =
 const gameOverTitle =
   document.querySelector<HTMLHeadingElement>("#game-over-title")!;
 
-//construct per-player contexts
+// Per-player contexts
 const player1Context: PlayerContext = {
   id: "p1",
   state: player1State,
@@ -201,17 +201,17 @@ const player2Context: PlayerContext = {
   },
 };
 
-// inputs enabled by default; timer starts on first keypress
+// Inputs enabled by default; timer starts on first keypress
 inputFieldP1.disabled = false;
 inputFieldP2.disabled = false;
 
-// initial UI render
+// Initial UI render
 renderHearts(heartsDisplayP1, player1State.playerHearts, "Player 1");
 renderHearts(heartsDisplayP2, player2State.playerHearts, "Player 2");
 renderStats(statsDisplayP1, player1State, timerState.elapsedSeconds);
 renderStats(statsDisplayP2, player2State, timerState.elapsedSeconds);
 
-// prepare rendering separately for each player
+// Prepare rendering separately for each player
 prepareSegmentRendering("p1", segmentTextP1);
 prepareSegmentRendering("p2", segmentTextP2);
 renderSegmentWords("p1", 0, "", segmentTargetElementP1);
@@ -220,7 +220,7 @@ renderSegmentWords("p2", 0, "", segmentTargetElementP2);
 // Timer UI
 timerDisplay.textContent = `Time: ${timerState.elapsedSeconds}s`;
 
-//timer bootstrap helper
+// Timer bootstrap helper
 function ensureTimerStarted(typedText: string): void {
   if (!timerState.hasStarted && typedText.length > 0) {
     startTimer((elapsedSeconds) => {
@@ -231,7 +231,7 @@ function ensureTimerStarted(typedText: string): void {
   }
 }
 
-//generic per-player helpers
+// Per-player helpers
 
 function updateHeartsForPlayer(player: PlayerContext): void {
   const label = player.id === "p1" ? "Player 1" : "Player 2";
@@ -244,6 +244,7 @@ function updateStatsForPlayer(player: PlayerContext): void {
 
 function loadNextSegmentFor(player: PlayerContext): void {
   clearJunk(player.id);
+
   const nextSegment = advanceToNextSegment(player.id);
   player.setSegmentText(nextSegment.text);
 
@@ -268,36 +269,17 @@ function handleIncorrectCharacter(player: PlayerContext): void {
   }
 }
 
+//start: segment completion only updates stats and loads the next segment
 function completeCurrentSegment(player: PlayerContext): void {
   const segmentText = player.getSegmentText();
-  const targetId: PlayerId = player.id === "p1" ? "p2" : "p1";
-  const targetContext = targetId === "p1" ? player1Context : player2Context;
 
-  // opponent's current char index in their segment
-  const opponentTypedLength = targetContext.inputField.value.length;
-  const opponentCurrentIndex = opponentTypedLength - 1;
-
-  // which word are they on now?
-  const currentWordIndex = getWordIndexForChar(targetId, opponentCurrentIndex);
-
-  const targetSegment = getCurrentSegment(targetId);
-  const totalWords = targetSegment.text.split(" ").length;
-
-  // next word index (clamped to last word if needed)
-  let junkWordIndex = currentWordIndex + 1;
-  if (junkWordIndex >= totalWords) {
-    junkWordIndex = totalWords - 1;
-  }
-
-  addJunkWord(targetId, junkWordIndex);
   player.state.segmentsCompleted++;
-  player.state.totalJunkSent++;
   player.state.totalCorrectCharacters += segmentText.length;
   updateStatsForPlayer(player);
 
-  // later: send junk to the opposing player based on player.id
   loadNextSegmentFor(player);
 }
+//end
 
 function setupPlayerInput(player: PlayerContext): void {
   player.inputField.addEventListener("input", () => {
@@ -329,14 +311,55 @@ function setupPlayerInput(player: PlayerContext): void {
       return;
     }
 
+    //start: golden word hit → send junk immediately
+        //start: golden word hit → send junk immediately
+    const { isGoldenEnd, wordIndex } = isGoldenWordAtCharEnd(
+      player.id,
+      currentIndex
+    );
+
+    if (isGoldenEnd && wordIndex !== null) {
+      const targetId: PlayerId = player.id === "p1" ? "p2" : "p1";
+
+      // pick the correct target context
+      const targetContext =
+        targetId === "p1" ? player1Context : player2Context;
+
+      // clamp the junk word index to a valid word in the target's segment
+      const targetSegmentText = targetContext.getSegmentText();
+      const targetWords = targetSegmentText.split(" ");
+      let junkWordIndex = wordIndex;
+      if (junkWordIndex >= targetWords.length) {
+        junkWordIndex = targetWords.length - 1;
+      }
+      if (junkWordIndex < 0) {
+        junkWordIndex = 0;
+      }
+
+      addJunkWord(targetId, junkWordIndex);
+      player.state.totalJunkSent++;
+      updateStatsForPlayer(player);
+
+      // force a re-render of the opponent's segment so junk is visible immediately
+      const targetTypedText = targetContext.inputField.value;
+      const targetCurrentIndex = Math.max(targetTypedText.length - 1, 0);
+      renderSegmentWords(
+        targetId,
+        targetCurrentIndex,
+        targetTypedText,
+        targetContext.segmentTargetElement
+      );
+    }
+    //end
+
+
     if (typedText === segmentText) {
       completeCurrentSegment(player);
     }
   });
 }
 
-
-//game over + restart helpers
+// Game over + restart helpers
 
 function handlePlayerDefeat(loser: PlayerContext): void {
   stopTimer();
@@ -344,7 +367,6 @@ function handlePlayerDefeat(loser: PlayerContext): void {
   inputFieldP2.disabled = true;
 
   const winnerLabel = loser.id === "p1" ? "Player 2" : "Player 1";
-
   gameOverTitle.textContent = `${winnerLabel} wins`;
 
   showGameOverOverlay(
@@ -395,7 +417,7 @@ function resetGame(): void {
   gameOverOverlay.style.display = "none";
 }
 
-// wire handlers
+// Wire handlers
 setupPlayerInput(player1Context);
 setupPlayerInput(player2Context);
 attachRestartHandler(restartButton, resetGame);

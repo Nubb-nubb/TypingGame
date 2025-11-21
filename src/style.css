@@ -71,7 +71,10 @@ body {
   font-size: 14px;
   box-sizing: border-box;
 }
-
+.word-golden {
+  text-decoration: underline wavy #f4f521;
+  font-weight: 600;
+}
 
 #player-input {
   width: 100%;

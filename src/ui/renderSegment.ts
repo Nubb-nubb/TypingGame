@@ -7,13 +7,25 @@ type WordBoundary = { start: number; end: number };
 type RendererState = {
   words: string[];
   boundaries: WordBoundary[];
-  // cache for stable junk words (per word index)
   junkWordOverrides: Record<number, string>;
+  goldenWordIndices: Set<number>;
 };
 
 const rendererStateByPlayer: Record<PlayerId, RendererState> = {
-  p1: { words: [], boundaries: [], junkWordOverrides: {} },
-  p2: { words: [], boundaries: [], junkWordOverrides: {} },
+  p1: {
+    words: [],
+    boundaries: [],
+    junkWordOverrides: {},
+    goldenWordIndices: new Set(),
+  },
+  p2: {
+    words: [],
+    boundaries: [],
+    junkWordOverrides: {},
+    //start
+    goldenWordIndices: new Set(),
+    //end
+  },
 };
 
 // Split a segment into words and track character ranges for a specific player
@@ -29,15 +41,29 @@ export function prepareSegmentRendering(
     const start = position;
     const end = start + word.length - 1;
     boundaries.push({ start, end });
-
-    // +1 for space after the word
     position = end + 2;
   }
+
+  //start: randomly mark some words as golden
+  const goldenWordIndices = new Set<number>();
+  const GOLDEN_PROBABILITY = 0.05; 
+
+  for (let i = 0; i < words.length; i++) {
+    const baseWord = words[i];
+    if (!baseWord) continue;
+    if (Math.random() < GOLDEN_PROBABILITY) {
+      goldenWordIndices.add(i);
+    }
+  }
+  //end
 
   rendererStateByPlayer[playerId] = {
     words,
     boundaries,
     junkWordOverrides: {},
+    //start
+    goldenWordIndices,
+    //end
   };
 }
 
@@ -58,6 +84,7 @@ export function renderSegmentWords(
 
   const junkIndices = getJunkWordIndices(playerId);
   const junkOverrides = state.junkWordOverrides;
+  const goldenIndices = state.goldenWordIndices;
 
   for (let i = 0; i < segmentWords.length; i++) {
     const baseWord: string = segmentWords[i] ?? "";
@@ -86,6 +113,11 @@ export function renderSegmentWords(
       } else if (currentIndex > bounds.end) {
         wordClassName = "word-done";
       }
+    }
+
+    const isGolden = goldenIndices.has(i);
+    if (isGolden) {
+      wordClassName += " word-golden";
     }
 
     const charSpans: string[] = [];
@@ -154,9 +186,11 @@ export function getEffectiveWords(playerId: PlayerId): string[] {
     const override = junkWordOverrides[index];
     return override ?? word ?? "";
   });
-  
 }
-export function getWordIndexForChar(playerId: PlayerId, charIndex: number): number {
+export function getWordIndexForChar(
+  playerId: PlayerId,
+  charIndex: number
+): number {
   const state = rendererStateByPlayer[playerId];
   const { boundaries } = state;
 
@@ -165,13 +199,37 @@ export function getWordIndexForChar(playerId: PlayerId, charIndex: number): numb
 
   for (let i = 0; i < boundaries.length; i++) {
     const bounds = boundaries[i];
-    if (!bounds) continue;                     
+    if (!bounds) continue;
 
     if (charIndex <= bounds.end) {
       return i;
     }
   }
 
-  return boundaries.length - 1;             
+  return boundaries.length - 1;
 }
+//start: helper to see if a char index is the end of a golden word
+export function isGoldenWordAtCharEnd(
+  playerId: PlayerId,
+  charIndex: number
+): { isGoldenEnd: boolean; wordIndex: number | null } {
+  const state = rendererStateByPlayer[playerId];
+  const { boundaries, goldenWordIndices } = state;
 
+  if (boundaries.length === 0) {
+    return { isGoldenEnd: false, wordIndex: null };
+  }
+
+  for (let i = 0; i < boundaries.length; i++) {
+    const bounds = boundaries[i];
+    if (!bounds) continue;
+
+    if (charIndex === bounds.end) {
+      const isGolden = goldenWordIndices.has(i);
+      return { isGoldenEnd: isGolden, wordIndex: isGolden ? i : null };
+    }
+  }
+
+  return { isGoldenEnd: false, wordIndex: null };
+}
+//end
