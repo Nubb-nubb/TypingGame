@@ -269,7 +269,7 @@ function handleIncorrectCharacter(player: PlayerContext): void {
   }
 }
 
-//start: segment completion only updates stats and loads the next segment
+//segment completion only updates stats and loads the next segment
 function completeCurrentSegment(player: PlayerContext): void {
   const segmentText = player.getSegmentText();
 
@@ -279,7 +279,6 @@ function completeCurrentSegment(player: PlayerContext): void {
 
   loadNextSegmentFor(player);
 }
-//end
 
 function setupPlayerInput(player: PlayerContext): void {
   player.inputField.addEventListener("input", () => {
@@ -293,15 +292,13 @@ function setupPlayerInput(player: PlayerContext): void {
       return;
     }
 
-    //start: update word + character highlighting on every keystroke
+    //update word + character highlighting on every keystroke
     renderSegmentWords(
       player.id,
       currentIndex,
       typedText,
       player.segmentTargetElement
     );
-    //end
-
     const segmentText = getEffectiveSegmentText(player.id);
     const expectedCharacter = segmentText[currentIndex];
     const actualCharacter = typedText[currentIndex];
@@ -311,8 +308,7 @@ function setupPlayerInput(player: PlayerContext): void {
       return;
     }
 
-    //start: golden word hit → send junk immediately
-        //start: golden word hit → send junk immediately
+    //golden word hit → send junk immediately
     const { isGoldenEnd, wordIndex } = isGoldenWordAtCharEnd(
       player.id,
       currentIndex
@@ -350,7 +346,6 @@ function setupPlayerInput(player: PlayerContext): void {
         targetContext.segmentTargetElement
       );
     }
-    //end
 
 
     if (typedText === segmentText) {
