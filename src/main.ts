@@ -1,10 +1,11 @@
 import "./style.css";
-import { addJunkWord, clearJunk } from "./game/junkEngine";
+import { addJunkWord, clearJunk, getJunkWordIndices } from "./game/junkEngine";
 
 import {
   getCurrentSegment,
   advanceToNextSegment,
   type PlayerId,
+  resetSegments,
 } from "./game/segmentManager";
 import { timerState, startTimer, stopTimer, resetTimer } from "./game/timer";
 
@@ -13,7 +14,6 @@ import {
   renderSegmentWords,
   //start
   getEffectiveSegmentText,
-  isGoldenWordAtCharEnd,
   //end
 } from "./ui/renderSegment";
 
@@ -21,6 +21,105 @@ import { renderHearts } from "./ui/renderHearts";
 import { renderStats } from "./ui/renderStats";
 import { showGameOverOverlay, attachRestartHandler } from "./ui/renderGameOver";
 import { MAX_PLAYER_HEARTS, type GameState } from "./game/gameState";
+
+//start local/remote player selection
+const url = new URL(window.location.href);
+const localPlayerParam = url.searchParams.get("player");
+
+// Default to p1 if not specified
+const localPlayerId: PlayerId = localPlayerParam === "p2" ? "p2" : "p1";
+const remotePlayerId: PlayerId = localPlayerId === "p1" ? "p2" : "p1";
+//end local/remote player selection
+
+// *comment*start: shared timer ownership (whoever types first becomes the timer owner)
+let timerOwnerId: PlayerId | null = null;
+// *comment*end
+
+//start websocket client setup
+const socket = new WebSocket("ws://localhost:8080");
+
+socket.addEventListener("open", () => {
+  console.log("Connected to WebSocket server as", localPlayerId);
+});
+
+socket.addEventListener("message", (event) => {
+  try {
+    const msg = JSON.parse(event.data as string);
+
+    //start handle SEND_JUNK messages
+    if (msg.type === "SEND_JUNK") {
+      const attackerId: PlayerId = msg.from;
+      const defenderId: PlayerId = attackerId === "p1" ? "p2" : "p1";
+
+      const attackerContext =
+        attackerId === "p1" ? player1Context : player2Context;
+      const defenderContext =
+        defenderId === "p1" ? player1Context : player2Context;
+
+      sendJunkToOpponent(attackerContext, defenderContext);
+    }
+    //end handle SEND_JUNK messages
+
+    // *comment*start: handle remote typing updates
+    if (msg.type === "INPUT_UPDATE") {
+      const playerId: PlayerId = msg.playerId;
+      const typedText: string = msg.typedText;
+
+      // Ignore our own echo messages; only apply remote player's typing
+      if (playerId !== localPlayerId) {
+        const ctx = playerId === "p1" ? player1Context : player2Context;
+
+        ctx.inputField.value = typedText;
+
+        const currentIndex = typedText.length - 1;
+        renderSegmentWords(
+          ctx.id,
+          currentIndex < 0 ? 0 : currentIndex,
+          typedText,
+          ctx.segmentTargetElement
+        );
+      }
+    }
+    // *comment*end
+
+    // *comment*start: apply shared timer ticks from the timer owner
+    if (msg.type === "TIMER_TICK") {
+      timerOwnerId = msg.ownerId as PlayerId;
+      const elapsed: number = msg.elapsedSeconds;
+
+      timerDisplay.textContent = `Time: ${elapsed}s`;
+      renderStats(statsDisplayP1, player1State, elapsed);
+      renderStats(statsDisplayP2, player2State, elapsed);
+    }
+    // *comment*end
+
+    // *comment*start: sync hearts and stats from the other client
+    if (msg.type === "STATE_SYNC") {
+      const newP1 = msg.p1State as GameState;
+      const newP2 = msg.p2State as GameState;
+
+      Object.assign(player1State, newP1);
+      Object.assign(player2State, newP2);
+
+      updateHeartsForPlayer(player1Context);
+      updateHeartsForPlayer(player2Context);
+      updateStatsForPlayer(player1Context);
+      updateStatsForPlayer(player2Context);
+    }
+    // *comment*end
+  } catch (err) {
+    console.error("Failed to parse WS message", err, event.data);
+  }
+});
+
+socket.addEventListener("close", () => {
+  console.log("WebSocket connection closed");
+});
+
+socket.addEventListener("error", (err) => {
+  console.error("WebSocket error", err);
+});
+//end websocket client setup
 
 // PlayerContext: encapsulates per-player runtime state
 type PlayerContext = {
@@ -101,6 +200,16 @@ appElement.innerHTML = `
         style="width: 80%; padding: 8px; border-radius: 8px; font-size: 12px; margin-top: 12px;"
         placeholder="Player 1: Start typing here..."
       />
+
+      <!-- start: send junk button for Player 1 -->
+      <button
+        id="send-junk-p1"
+        type="button"
+        style="margin-top: 8px; padding: 6px 12px; font-size: 12px;"
+      >
+        Send junk
+      </button>
+      <!-- end -->
     </div>
 
     <div
@@ -128,6 +237,16 @@ appElement.innerHTML = `
         style="width: 80%; padding: 8px; border-radius: 8px; font-size: 12px; margin-top: 12px;"
         placeholder="Player 2: Start typing here..."
       />
+
+      <!-- start: send junk button for Player 2 -->
+      <button
+        id="send-junk-p2"
+        type="button"
+        style="margin-top: 8px; padding: 6px 12px; font-size: 12px;"
+      >
+        Send junk
+      </button>
+      <!-- end -->
     </div>
   </div>
 
@@ -174,6 +293,13 @@ const restartButton =
 const gameOverTitle =
   document.querySelector<HTMLHeadingElement>("#game-over-title")!;
 
+//start: cache send-junk buttons
+const sendJunkButtonP1 =
+  document.querySelector<HTMLButtonElement>("#send-junk-p1")!;
+const sendJunkButtonP2 =
+  document.querySelector<HTMLButtonElement>("#send-junk-p2")!;
+//end
+
 // Per-player contexts
 const player1Context: PlayerContext = {
   id: "p1",
@@ -201,9 +327,14 @@ const player2Context: PlayerContext = {
   },
 };
 
-// Inputs enabled by default; timer starts on first keypress
-inputFieldP1.disabled = false;
-inputFieldP2.disabled = false;
+const localContext =
+  localPlayerId === "p1" ? player1Context : player2Context;
+const remoteContext =
+  localPlayerId === "p1" ? player2Context : player1Context;
+
+// Inputs: only local player can type
+inputFieldP1.disabled = localPlayerId !== "p1";
+inputFieldP2.disabled = localPlayerId !== "p2";
 
 // Initial UI render
 renderHearts(heartsDisplayP1, player1State.playerHearts, "Player 1");
@@ -220,13 +351,52 @@ renderSegmentWords("p2", 0, "", segmentTargetElementP2);
 // Timer UI
 timerDisplay.textContent = `Time: ${timerState.elapsedSeconds}s`;
 
+// *comment*start: helper to broadcast hearts + stats to the other tab
+function broadcastState(): void {
+  if (socket.readyState !== WebSocket.OPEN) return;
+
+  socket.send(
+    JSON.stringify({
+      type: "STATE_SYNC",
+      from: localPlayerId,
+      p1State: player1State,
+      p2State: player2State,
+    })
+  );
+}
+// *comment*end
+
 // Timer bootstrap helper
-function ensureTimerStarted(typedText: string): void {
-  if (!timerState.hasStarted && typedText.length > 0) {
+function ensureTimerStarted(typedText: string, playerId: PlayerId): void {
+  if (typedText.length === 0) return;
+
+  // *comment*start: first typer becomes timer owner
+  if (!timerOwnerId) {
+    timerOwnerId = playerId;
+  }
+  // If this client is not the owner, don't start a local timer loop
+  if (timerOwnerId !== localPlayerId) {
+    return;
+  }
+  // *comment*end
+
+  if (!timerState.hasStarted) {
     startTimer((elapsedSeconds) => {
       timerDisplay.textContent = `Time: ${elapsedSeconds}s`;
       renderStats(statsDisplayP1, player1State, elapsedSeconds);
       renderStats(statsDisplayP2, player2State, elapsedSeconds);
+
+      // *comment*start: broadcast timer ticks so the other tab stays in sync
+      if (socket.readyState === WebSocket.OPEN && timerOwnerId) {
+        socket.send(
+          JSON.stringify({
+            type: "TIMER_TICK",
+            ownerId: timerOwnerId,
+            elapsedSeconds,
+          })
+        );
+      }
+      // *comment*end
     });
   }
 }
@@ -254,8 +424,10 @@ function loadNextSegmentFor(player: PlayerContext): void {
   renderSegmentWords(player.id, 0, "", player.segmentTargetElement);
 
   player.inputField.value = "";
-  player.inputField.disabled = false;
-  player.inputField.focus();
+  player.inputField.disabled = player.id !== localPlayerId;
+  if (player.id === localPlayerId) {
+    player.inputField.focus();
+  }
 }
 
 function handleIncorrectCharacter(player: PlayerContext): void {
@@ -264,12 +436,16 @@ function handleIncorrectCharacter(player: PlayerContext): void {
   player.state.playerHearts--;
   updateHeartsForPlayer(player);
 
+  // *comment*start: sync hearts after a typo
+  broadcastState();
+  // *comment*end
+
   if (player.state.playerHearts <= 0) {
     handlePlayerDefeat(player);
   }
 }
 
-//segment completion only updates stats and loads the next segment
+//start: segment completion only updates stats and loads the next segment
 function completeCurrentSegment(player: PlayerContext): void {
   const segmentText = player.getSegmentText();
 
@@ -277,28 +453,90 @@ function completeCurrentSegment(player: PlayerContext): void {
   player.state.totalCorrectCharacters += segmentText.length;
   updateStatsForPlayer(player);
 
+  // *comment*start: sync stats on segment completion
+  broadcastState();
+  // *comment*end
+
   loadNextSegmentFor(player);
 }
+//end
+
+//start: send junk helper (button-driven)
+function sendJunkToOpponent(
+  attacker: PlayerContext,
+  defender: PlayerContext
+): void {
+  const defenderSegmentText = defender.getSegmentText();
+  const totalWords = defenderSegmentText
+    .split(" ")
+    .filter((word) => word.length > 0).length;
+
+  if (totalWords === 0) {
+    return;
+  }
+
+  const currentJunkIndices = getJunkWordIndices(defender.id);
+
+  // All words already junked → nothing more to do
+  if (currentJunkIndices.size >= totalWords) {
+    return;
+  }
+
+  // Pick the first non-junk word index
+  let targetWordIndex = 0;
+  while (
+    currentJunkIndices.has(targetWordIndex) &&
+    targetWordIndex < totalWords
+  ) {
+    targetWordIndex++;
+  }
+
+  if (targetWordIndex >= totalWords) {
+    return;
+  }
+
+  addJunkWord(defender.id, targetWordIndex);
+
+  attacker.state.totalJunkSent++;
+  updateStatsForPlayer(attacker);
+
+  const defenderTypedText = defender.inputField.value;
+  const defenderCurrentIndex = defenderTypedText.length - 1;
+
+  renderSegmentWords(
+    defender.id,
+    defenderCurrentIndex < 0 ? 0 : defenderCurrentIndex,
+    defenderTypedText,
+    defender.segmentTargetElement
+  );
+
+  // *comment*start: sync stats after sending junk
+  broadcastState();
+  // *comment*end
+}
+//end
 
 function setupPlayerInput(player: PlayerContext): void {
   player.inputField.addEventListener("input", () => {
     const typedText = player.inputField.value;
     const currentIndex = typedText.length - 1;
 
-    ensureTimerStarted(typedText);
+    ensureTimerStarted(typedText, player.id);
 
     if (currentIndex < 0) {
       renderSegmentWords(player.id, 0, typedText, player.segmentTargetElement);
       return;
     }
 
-    //update word + character highlighting on every keystroke
+    //start: update word + character highlighting on every keystroke
     renderSegmentWords(
       player.id,
       currentIndex,
       typedText,
       player.segmentTargetElement
     );
+    //end
+
     const segmentText = getEffectiveSegmentText(player.id);
     const expectedCharacter = segmentText[currentIndex];
     const actualCharacter = typedText[currentIndex];
@@ -308,45 +546,17 @@ function setupPlayerInput(player: PlayerContext): void {
       return;
     }
 
-    //golden word hit → send junk immediately
-    const { isGoldenEnd, wordIndex } = isGoldenWordAtCharEnd(
-      player.id,
-      currentIndex
-    );
-
-    if (isGoldenEnd && wordIndex !== null) {
-      const targetId: PlayerId = player.id === "p1" ? "p2" : "p1";
-
-      // pick the correct target context
-      const targetContext =
-        targetId === "p1" ? player1Context : player2Context;
-
-      // clamp the junk word index to a valid word in the target's segment
-      const targetSegmentText = targetContext.getSegmentText();
-      const targetWords = targetSegmentText.split(" ");
-      let junkWordIndex = wordIndex;
-      if (junkWordIndex >= targetWords.length) {
-        junkWordIndex = targetWords.length - 1;
-      }
-      if (junkWordIndex < 0) {
-        junkWordIndex = 0;
-      }
-
-      addJunkWord(targetId, junkWordIndex);
-      player.state.totalJunkSent++;
-      updateStatsForPlayer(player);
-
-      // force a re-render of the opponent's segment so junk is visible immediately
-      const targetTypedText = targetContext.inputField.value;
-      const targetCurrentIndex = Math.max(targetTypedText.length - 1, 0);
-      renderSegmentWords(
-        targetId,
-        targetCurrentIndex,
-        targetTypedText,
-        targetContext.segmentTargetElement
+    // *comment*start: broadcast local typing over WebSocket
+    if (player.id === localPlayerId && socket.readyState === WebSocket.OPEN) {
+      socket.send(
+        JSON.stringify({
+          type: "INPUT_UPDATE",
+          playerId: player.id,
+          typedText,
+        })
       );
     }
-
+    // *comment*end
 
     if (typedText === segmentText) {
       completeCurrentSegment(player);
@@ -383,6 +593,12 @@ function resetGame(): void {
   player2State.totalJunkSent = 0;
   player2State.totalCorrectCharacters = 0;
 
+  // Reset both players' segment streams back to the start (easy pool),
+  // and clear any leftover junk state.
+  resetSegments();
+  clearJunk("p1");
+  clearJunk("p2");
+
   resetTimer();
 
   updateHeartsForPlayer(player1Context);
@@ -391,8 +607,8 @@ function resetGame(): void {
   updateStatsForPlayer(player2Context);
   timerDisplay.textContent = `Time: ${timerState.elapsedSeconds}s`;
 
-  currentSegmentP1 = advanceToNextSegment("p1");
-  currentSegmentP2 = advanceToNextSegment("p2");
+  currentSegmentP1 = getCurrentSegment("p1");
+  currentSegmentP2 = getCurrentSegment("p2");
   segmentTextP1 = currentSegmentP1.text;
   segmentTextP2 = currentSegmentP2.text;
 
@@ -406,13 +622,61 @@ function resetGame(): void {
 
   inputFieldP1.value = "";
   inputFieldP2.value = "";
-  inputFieldP1.disabled = false;
-  inputFieldP2.disabled = false;
-  inputFieldP1.focus();
+  inputFieldP1.disabled = localPlayerId !== "p1";
+  inputFieldP2.disabled = localPlayerId !== "p2";
+
+  if (localPlayerId === "p1") {
+    inputFieldP1.focus();
+  } else {
+    inputFieldP2.focus();
+  }
+
   gameOverOverlay.style.display = "none";
+
+  // *comment*start: reset shared timer owner and sync state after restart
+  timerOwnerId = null;
+  broadcastState();
+  // *comment*end
 }
 
 // Wire handlers
-setupPlayerInput(player1Context);
-setupPlayerInput(player2Context);
+
+// Only wire input for the local player
+setupPlayerInput(localContext);
 attachRestartHandler(restartButton, resetGame);
+
+//start: wire send-junk buttons via WebSocket
+if (localPlayerId === "p1") {
+  sendJunkButtonP1.disabled = false;
+  sendJunkButtonP2.disabled = true;
+  sendJunkButtonP2.style.opacity = "0.4";
+  sendJunkButtonP2.style.pointerEvents = "none";
+
+  sendJunkButtonP1.addEventListener("click", () => {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(
+        JSON.stringify({
+          type: "SEND_JUNK",
+          from: "p1" as PlayerId,
+        })
+      );
+    }
+  });
+} else {
+  sendJunkButtonP1.disabled = true;
+  sendJunkButtonP1.style.opacity = "0.4";
+  sendJunkButtonP1.style.pointerEvents = "none";
+  sendJunkButtonP2.disabled = false;
+
+  sendJunkButtonP2.addEventListener("click", () => {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(
+        JSON.stringify({
+          type: "SEND_JUNK",
+          from: "p2" as PlayerId,
+        })
+      );
+    }
+  });
+}
+//end

@@ -6,17 +6,21 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "ws": "node server.mjs"
   },
   "dependencies": {
-    "vue": "^3.5.24"
+    "vue": "^3.5.24",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vue/tsconfig": "^0.8.1",
+    "nodemon": "^3.1.11",
     "typescript": "~5.9.3",
     "vite": "^7.2.4",
     "vue-tsc": "^3.1.4"
   }
+  
 }

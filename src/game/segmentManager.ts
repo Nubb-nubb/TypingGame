@@ -2,9 +2,8 @@ import { segmentStream, type Segment } from "../segmentEngine";
 
 export type PlayerId = "p1" | "p2";
 
-//two independent segment streams, one per player
-const streamP1 = segmentStream();
-const streamP2 = segmentStream();
+let streamP1 = segmentStream();
+let streamP2 = segmentStream();
 
 let currentSegmentP1: Segment = streamP1.next().value as Segment;
 let currentSegmentP2: Segment = streamP2.next().value as Segment;
@@ -25,3 +24,12 @@ export function advanceToNextSegment(playerId: PlayerId): Segment {
 
   return nextSegment;
 }
+
+export function resetSegments(): void {
+  streamP1 = segmentStream();
+  streamP2 = segmentStream();
+
+  currentSegmentP1 = streamP1.next().value as Segment;
+  currentSegmentP2 = streamP2.next().value as Segment;
+}
+

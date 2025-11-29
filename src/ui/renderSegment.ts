@@ -1,4 +1,3 @@
-// src/ui/renderSegment.ts
 import type { PlayerId } from "../game/segmentManager";
 import { getJunkWordIndices, scrambleWord } from "../game/junkEngine";
 
@@ -22,9 +21,7 @@ const rendererStateByPlayer: Record<PlayerId, RendererState> = {
     words: [],
     boundaries: [],
     junkWordOverrides: {},
-    //start
     goldenWordIndices: new Set(),
-    //end
   },
 };
 
@@ -44,7 +41,7 @@ export function prepareSegmentRendering(
     position = end + 2;
   }
 
-  //start: randomly mark some words as golden
+  //randomly mark some words as golden
   const goldenWordIndices = new Set<number>();
   const GOLDEN_PROBABILITY = 0.05; 
 
@@ -55,15 +52,12 @@ export function prepareSegmentRendering(
       goldenWordIndices.add(i);
     }
   }
-  //end
 
   rendererStateByPlayer[playerId] = {
     words,
     boundaries,
     junkWordOverrides: {},
-    //start
     goldenWordIndices,
-    //end
   };
 }
 
@@ -165,7 +159,7 @@ export function renderSegmentWords(
   targetElement.innerHTML = htmlParts.join(" ");
 }
 
-//start: return the *effective* text (original + junk) used for correctness checks
+//return the *effective* text (original + junk) used for correctness checks
 export function getEffectiveSegmentText(playerId: PlayerId): string {
   const state = rendererStateByPlayer[playerId];
   const { words, junkWordOverrides } = state;
@@ -208,7 +202,7 @@ export function getWordIndexForChar(
 
   return boundaries.length - 1;
 }
-//start: helper to see if a char index is the end of a golden word
+//helper to see if a char index is the end of a golden word
 export function isGoldenWordAtCharEnd(
   playerId: PlayerId,
   charIndex: number
@@ -232,4 +226,4 @@ export function isGoldenWordAtCharEnd(
 
   return { isGoldenEnd: false, wordIndex: null };
 }
-//end
+
