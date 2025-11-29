@@ -28,10 +28,9 @@ const localPlayerParam = url.searchParams.get("player");
 
 // Default to p1 if not specified
 const localPlayerId: PlayerId = localPlayerParam === "p2" ? "p2" : "p1";
-const remotePlayerId: PlayerId = localPlayerId === "p1" ? "p2" : "p1";
 //end local/remote player selection
 
-// *comment*start: shared timer ownership (whoever types first becomes the timer owner)
+// *comment*start: shared timer ownership (whoever types first on this tab becomes the timer owner)
 let timerOwnerId: PlayerId | null = null;
 // *comment*end
 
@@ -367,14 +366,14 @@ function broadcastState(): void {
 // *comment*end
 
 // Timer bootstrap helper
-function ensureTimerStarted(typedText: string, playerId: PlayerId): void {
+function ensureTimerStarted(typedText: string): void {
   if (typedText.length === 0) return;
 
-  // *comment*start: first typer becomes timer owner
+  // *comment*start: on this tab, first non-empty input makes this player the timer owner
   if (!timerOwnerId) {
-    timerOwnerId = playerId;
+    timerOwnerId = localPlayerId;
   }
-  // If this client is not the owner, don't start a local timer loop
+  // If this tab is not the timer owner, don't start a local timer loop
   if (timerOwnerId !== localPlayerId) {
     return;
   }
@@ -382,6 +381,7 @@ function ensureTimerStarted(typedText: string, playerId: PlayerId): void {
 
   if (!timerState.hasStarted) {
     startTimer((elapsedSeconds) => {
+      // Local UI update
       timerDisplay.textContent = `Time: ${elapsedSeconds}s`;
       renderStats(statsDisplayP1, player1State, elapsedSeconds);
       renderStats(statsDisplayP2, player2State, elapsedSeconds);
@@ -521,7 +521,7 @@ function setupPlayerInput(player: PlayerContext): void {
     const typedText = player.inputField.value;
     const currentIndex = typedText.length - 1;
 
-    ensureTimerStarted(typedText, player.id);
+    ensureTimerStarted(typedText);
 
     if (currentIndex < 0) {
       renderSegmentWords(player.id, 0, typedText, player.segmentTargetElement);
